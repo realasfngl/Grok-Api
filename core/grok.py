@@ -1,14 +1,29 @@
-from core      import Log, Run, Utils, Parser, Signature, Anon
-from curl_cffi import requests, CurlMime
-from bs4       import BeautifulSoup
-from json      import dumps, loads
-from uuid      import uuid4
+from core        import Log, Run, Utils, Parser, Signature, Anon
+from curl_cffi   import requests, CurlMime
+from dataclasses import dataclass, field
+from bs4         import BeautifulSoup
+from json        import dumps, loads
+from uuid        import uuid4
 
+
+@dataclass
+class Models:
+    models: dict[str, list[str]] = field(default_factory=lambda: {
+        "grok-3-auto": ["MODEL_MODE_AUTO", "auto"],
+        "grok-3-fast": ["MODEL_MODE_FAST", "fast"],
+        "grok-4": ["MODEL_MODE_EXPERT", "expert"],
+        "grok-4-mini-thinking-tahoe": ["MODEL_MODE_GROK_4_MINI_THINKING", "grok-4-mini-thinking"]
+    })
+
+    def get_model_mode(self, model: str, index: int) -> str:
+        return self.models.get(model, ["MODEL_MODE_AUTO", "auto"])[index]
+
+_Models = Models()
 
 class Grok:
     
     
-    def __init__(self, proxy: str = None) -> None:
+    def __init__(self, model: str = "grok-3-auto", proxy: str = None) -> None:
         self.session: requests.session.Session = requests.Session(impersonate="chrome136")
         self.session.headers = {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -26,6 +41,9 @@ class Grok:
             'upgrade-insecure-requests': '1',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
+        self.model_mode: str = _Models.get_model_mode(model, 0)
+        self.model: str = model
+        self.mode: str = _Models.get_model_mode(model, 1)
         self.c_run: int = 0
         self.keys: dict = Anon.generate_keys()
         if proxy:
@@ -163,7 +181,7 @@ class Grok:
         if not extra_data:
             conversation_data: dict = {
                 'temporary': False,
-                'modelName': 'grok-3',
+                'modelName': self.model,
                 'message': message,
                 'fileAttachments': [],
                 'imageAttachments': [],
@@ -182,19 +200,19 @@ class Grok:
                 'disableTextFollowUps': False,
                 'responseMetadata': {
                     'requestModelDetails': {
-                        'modelId': 'grok-3',
+                        'modelId': self.model,
                     },
                 },
                 'disableMemory': False,
                 'forceSideBySide': False,
-                'modelMode': 'MODEL_MODE_AUTO',
+                'modelMode': self.model_mode,
                 'isAsyncChat': False,
             }
             
             convo_request: requests.models.Response = self.session.post('https://grok.com/rest/app-chat/conversations/new', json=conversation_data, timeout=9999)
             
             if "modelResponse" in convo_request.text:
-                response = conversation_id = parent_response = None
+                response = conversation_id = parent_response = image_urls = None
                 stream_response: list = []
                 
                 for response_dict in convo_request.text.strip().split('\n'):  
@@ -212,10 +230,15 @@ class Grok:
 
                     if not parent_response and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId'):
                         parent_response: str = data['result']['response']['modelResponse']['responseId']
+                    
+                    if not image_urls and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
+                        image_urls: str = data['result']['response']['modelResponse']['generatedImageUrls']
+                    
                 
                 return {
                     "response": response,
                     "stream_response": stream_response,
+                    "images": image_urls,
                     "extra_data": {
                         "anon_user": self.anon_user,
                         "cookies": self.session.cookies.get_dict(),
@@ -237,7 +260,7 @@ class Grok:
         else:
             conversation_data: dict = {
                 'message': message,
-                'modelName': 'grok-3',
+                'modelName': self.model,
                 'parentResponseId': extra_data["parentResponseId"],
                 'disableSearch': False,
                 'enableImageGeneration': True,
@@ -256,11 +279,11 @@ class Grok:
                 'webpageUrls': [],
                 'metadata': {
                     'requestModelDetails': {
-                        'modelId': 'grok-3',
+                        'modelId': self.model,
                     },
                     'request_metadata': {
-                        'model': 'grok-3',
-                        'mode': 'auto',
+                        'model': self.model,
+                        'mode': self.mode,
                     },
                 },
                 'disableTextFollowUps': False,
@@ -268,7 +291,7 @@ class Grok:
                 'isFromGrokFiles': False,
                 'disableMemory': False,
                 'forceSideBySide': False,
-                'modelMode': 'MODEL_MODE_AUTO',
+                'modelMode': self.model_mode,
                 'isAsyncChat': False,
                 'skipCancelCurrentInflightRequests': False,
                 'isRegenRequest': False,
@@ -277,7 +300,6 @@ class Grok:
             convo_request: requests.models.Response = self.session.post(f'https://grok.com/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', json=conversation_data, timeout=9999)
 
             if "modelResponse" in convo_request.text:
-                
                 response = conversation_id = parent_response = None
                 stream_response: list = []
                 
@@ -293,10 +315,14 @@ class Grok:
 
                     if not parent_response and data.get('result', {}).get('modelResponse', {}).get('responseId'):
                         parent_response: str = data['result']['modelResponse']['responseId']
+                        
+                    if not image_urls and data.get('result', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
+                        image_urls: str = data['result']['modelResponse']['generatedImageUrls']
                 
                 return {
                     "response": response,
                     "stream_response": stream_response,
+                    "images": image_urls,
                     "extra_data": {
                         "anon_user": self.anon_user,
                         "cookies": self.session.cookies.get_dict(),

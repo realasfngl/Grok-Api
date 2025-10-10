@@ -36,17 +36,26 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Models:
+
+| Model | Mode | Description |
+|-------|------|-------------|
+| `grok-3-auto` | auto | Automatic mode |
+| `grok-3-fast` | fast | Fast processing mode |
+| `grok-4` | expert | Expert mode |
+| `grok-4-mini-thinking-tahoe` | grok-4-mini-thinking | Mini thinking mode |
+
 ### Manual Usage (Python)
 
 **New conversation:**
 ```python
 from core import Grok
 
-response = Grok().start_convo("Hello, how are you today?")
+response = Grok("grok-3-fast").start_convo("Hello, how are you today?")
 print(response)
 
 proxy = "http://username:password@ip:port"
-response = Grok(proxy).start_convo("Tell me a joke")
+response = Grok("grok-3-fast", proxy).start_convo("Tell me a joke")
 print(response)
 ```
 
@@ -65,6 +74,7 @@ print(response2)
 {
     "response": "Yo, I'm just chilling in the digital realm...",
     "stream_response": ["Yo", ",", " I'm", " just", " chilling", "..."],
+    "images": None,
     "extra_data": {"..."}
 }
 ```
@@ -94,6 +104,7 @@ response = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Hello, Grok!",
+        "model": "grok-3-fast",
         "extra_data": None
     }
 )
@@ -109,6 +120,7 @@ response1 = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Hello!",
+        "model": "grok-3-fast",
         "extra_data": None
     }
 )
@@ -120,6 +132,7 @@ response2 = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Tell me more",
+        "model": "grok-3-fast",
         "extra_data": data1["extra_data"]
     }
 )
@@ -133,6 +146,7 @@ print(response2.json())
   "status": "success",
   "response": "Complete response message from Grok",
   "stream_response": ["Token", "by", "token", "response", "array"],
+  "images": null,
   "extra_data": {"..."}
 }
 ```
