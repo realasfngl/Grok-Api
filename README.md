@@ -1,2 +1,113 @@
 # Grok-Api
-A free Grok API wrapper that allows you to use Grok without API access or Account.
+
+A free Grok API wrapper that allows you to use Grok without API access or account authentication.
+
+## Overview
+
+This project provides a Python-based API wrapper for Grok AI, enabling you to interact with Grok's conversational AI without requiring official API access or account credentials. It includes both a direct Python interface and a FastAPI server for easy integration into your applications.
+
+## Features
+
+- 🔓 **No Authentication Required** - Access Grok without an account
+- 🆓 **Completely Free** - No API keys or paid subscriptions needed
+- 🚀 **FastAPI Server** - Ready-to-use REST API endpoint
+- 🌐 **Proxy Support** - Full support for HTTP proxies
+- 📡 **Streaming Responses** - Receive both complete responses and token-by-token streams
+- ⚡ **High Performance** - Multi-worker support for concurrent requests
+
+## Installation
+
+```bash
+git clone https://github.com/realasfngl/Grok-Api.git
+cd Grok-Api
+pip install -r requirements.txt
+```
+
+### Requirements
+
+- Python 3.8+
+- curl_cffi
+- fastapi
+- uvicorn
+- coincurve
+- beautifulsoup4
+- pydantic
+- colorama
+
+## Usage
+
+### Manual Usage (Python)
+
+```python
+from core import Grok
+
+response = Grok().start_convo("Hello, how are you today?")
+print(response)
+
+proxy = "http://username:password@ip:port"
+response = Grok(proxy).start_convo("Tell me a joke")
+print(response)
+```
+
+**Example Output:**
+```python
+{
+    "response": "Yo, I'm just chilling in the digital realm...",
+    "stream_response": ["Yo", ",", " I'm", " just", " chilling", "..."]
+}
+```
+
+### API Server
+
+#### Starting the Server
+
+**Simple start:**
+```bash
+python api_server.py
+```
+
+**Production start with custom configuration:**
+```bash
+uvicorn api_server:app --host 0.0.0.0 --port 6969 --workers 50
+```
+
+### API Response Format
+
+```json
+{
+  "status": "success",
+  "response": "Complete response message from Grok",
+  "stream_response": ["Token", "by", "token", "response", "array"]
+}
+```
+
+## Configuration
+
+### Proxy Format
+
+The wrapper accepts proxies in the following formats:
+- `http://ip:port`
+- `http://username:password@ip:port`
+- `ip:port` (automatically prefixed with `http://`)
+
+### API Server Settings
+
+Modify `api_server.py` to change:
+- **Host**: Default `0.0.0.0` (all interfaces)
+- **Port**: Default `6969`
+- **Workers**: Default `50` (adjust based on your server capacity)
+
+## Troubleshooting
+
+**Common Issues:**
+
+1. **IP Flag** - `{"error":{"code":7,"message":"Request rejected by anti-bot rules.","details":[]}}` - This indicates your IP or proxy has been flagged. Try using a different proxy or IP address.
+
+## Support
+
+If you find this project helpful, consider starring the repository!
+
+---
+
+**Note:** This project may break if Grok updates their web interface. Please report any issues if the wrapper stops working.
+**Contact:** This project is for educational purposes only. If Grok has an Issue with this Project please contact me via my email nuhuh3116@gmail.com.
