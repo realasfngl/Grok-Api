@@ -25,7 +25,7 @@ pip install -r requirements.txt
 
 ### Requirements
 
-- Python 3.8+
+- Python 3.10+
 - curl_cffi
 - fastapi
 - uvicorn
