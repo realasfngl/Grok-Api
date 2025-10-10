@@ -10,6 +10,7 @@ app = FastAPI()
 class ConversationRequest(BaseModel):
     proxy: str
     message: str
+    extra_data: dict = None
 
 def format_proxy(proxy: str) -> str:
     
@@ -42,7 +43,7 @@ async def create_conversation(request: ConversationRequest):
     proxy = format_proxy(request.proxy)
     
     try:
-        answer: dict = Grok(proxy).start_convo(request.message)
+        answer: dict = Grok(proxy).start_convo(request.message, request.extra_data)
 
         return {
             "status": "success",

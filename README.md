@@ -38,6 +38,7 @@ pip install -r requirements.txt
 
 ### Manual Usage (Python)
 
+**New conversation:**
 ```python
 from core import Grok
 
@@ -49,11 +50,22 @@ response = Grok(proxy).start_convo("Tell me a joke")
 print(response)
 ```
 
+**Continue conversation:**
+```python
+from core import Grok
+
+response = Grok().start_convo("Hello, how are you today?")
+print(response)
+
+response2 = Grok().start_convo("That's nice! Glad to hear!", extra_data=response["extra_data"])
+print(response2)
+```
 **Example Output:**
 ```python
 {
     "response": "Yo, I'm just chilling in the digital realm...",
-    "stream_response": ["Yo", ",", " I'm", " just", " chilling", "..."]
+    "stream_response": ["Yo", ",", " I'm", " just", " chilling", "..."],
+    "extra_data": {"..."}
 }
 ```
 
@@ -71,13 +83,56 @@ python api_server.py
 uvicorn api_server:app --host 0.0.0.0 --port 6969 --workers 50
 ```
 
+#### Making API Requests
+
+**New conversation:**
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:6969/ask",
+    json={
+        "proxy": "http://user:pass@ip:port",
+        "message": "Hello, Grok!",
+        "extra_data": None
+    }
+)
+print(response.json())
+```
+
+**Continue conversation:**
+```python
+import requests
+
+response1 = requests.post(
+    "http://localhost:6969/ask",
+    json={
+        "proxy": "http://user:pass@ip:port",
+        "message": "Hello!",
+        "extra_data": None
+    }
+)
+data1 = response1.json()
+
+response2 = requests.post(
+    "http://localhost:6969/ask",
+    json={
+        "proxy": "http://user:pass@ip:port",
+        "message": "Tell me more",
+        "extra_data": data1["extra_data"]
+    }
+)
+print(response2.json())
+```
+
 ### API Response Format
 
 ```json
 {
   "status": "success",
   "response": "Complete response message from Grok",
-  "stream_response": ["Token", "by", "token", "response", "array"]
+  "stream_response": ["Token", "by", "token", "response", "array"],
+  "extra_data": {"..."}
 }
 ```
 
