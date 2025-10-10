@@ -229,6 +229,8 @@ class Grok:
                     }
                 }
             else:
+                if 'rejected by anti-bot rules' in convo_request.text:
+                    return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
                 Log.Error("Something went wrong")
                 Log.Error(convo_request.text)
                 return {"error": convo_request.text}
@@ -308,6 +310,8 @@ class Grok:
                     }
                 }
             else:
+                if 'rejected by anti-bot rules' in convo_request.text:
+                    return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
                 Log.Error("Something went wrong")
                 Log.Error(convo_request.text)
                 return {"error": convo_request.text}
