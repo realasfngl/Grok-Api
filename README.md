@@ -166,4 +166,5 @@ If you find this project helpful, consider starring the repository!
 ---
 
 **Note:** This project may break if Grok updates their web interface. Please report any issues if the wrapper stops working.
+
 **Contact:** This project is for educational purposes only. If Grok has an Issue with this Project please contact me via my email nuhuh3116@gmail.com.
