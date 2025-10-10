@@ -113,6 +113,7 @@ response1 = requests.post(
     }
 )
 data1 = response1.json()
+print(data1)
 
 response2 = requests.post(
     "http://localhost:6969/ask",
