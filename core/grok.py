@@ -300,7 +300,7 @@ class Grok:
             convo_request: requests.models.Response = self.session.post(f'https://grok.com/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', json=conversation_data, timeout=9999)
 
             if "modelResponse" in convo_request.text:
-                response = conversation_id = parent_response = None
+                response = conversation_id = parent_response = image_urls = None
                 stream_response: list = []
                 
                 for response_dict in convo_request.text.strip().split('\n'):
