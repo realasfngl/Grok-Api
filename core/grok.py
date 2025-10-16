@@ -139,7 +139,7 @@ class Grok:
             self.c_run += 1
         
     
-    def start_convo(self, message: str, extra_data: str = None) -> dict:
+    def start_convo(self, message: str, extra_data: dict = None) -> dict:
         
         if not extra_data:
             self._load()
