@@ -23,22 +23,11 @@ _Models = Models()
 class Grok:
     
     
-    def __init__(self, model: str = "grok-3-auto", proxy: str = None) -> None:
+    def __init__(self, model: str = "grok-4-mini-thinking-tahoe", proxy: str = None) -> None:
         self.session: requests.session.Session = requests.Session(impersonate="chrome136")
         self.session.headers = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-            'cache-control': 'no-cache',
-            'pragma': 'no-cache',
-            'priority': 'u=0, i',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'document',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'same-origin',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
+            
+            'accept-encoding': 'identity',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
         self.model_mode: str = _Models.get_model_mode(model, 0)
@@ -61,37 +50,34 @@ class Grok:
 
             self.actions, self.xsid_script = Parser.parse_grok(scripts)
             
-            self.baggage: str = Utils.between(load_site.text, '<meta name="baggage" content="', '"')
-            self.sentry_trace: str = Utils.between(load_site.text, '<meta name="sentry-trace" content="', '-')
         else:
             self.session.cookies.update(extra_data["cookies"])
 
             self.actions: list = extra_data["actions"]
             self.xsid_script: list =  extra_data["xsid_script"]
-            self.baggage: str = extra_data["baggage"]
-            self.sentry_trace: str = extra_data["sentry_trace"]
             
     
     def c_request(self, next_action: str) -> None:
 
         self.session.headers = {
             'accept': 'text/x-component',
-            'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-            'baggage': self.baggage,
-            'cache-control': 'no-cache',
+            # 'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+            # 'baggage': self.baggage,
+            # 'cache-control': 'no-cache',
             'next-action': next_action,
             'next-router-state-tree': '%5B%22%22%2C%7B%22children%22%3A%5B%22c%22%2C%7B%22children%22%3A%5B%5B%22slug%22%2C%22%22%2C%22oc%22%5D%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%2Ctrue%5D',
-            'origin': 'https://grok.com',
-            'pragma': 'no-cache',
-            'priority': 'u=1, i',
-            'referer': 'https://grok.com/c',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+            # 'origin': 'https://grok.com',
+            'accept-encoding': 'identity',
+            # 'pragma': 'no-cache',
+            # 'priority': 'u=1, i',
+            # 'referer': 'https://grok.com/c',
+            # 'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+            # 'sec-ch-ua-mobile': '?0',
+            # 'sec-ch-ua-platform': '"Windows"',
+            # 'sec-fetch-dest': 'empty',
+            # 'sec-fetch-mode': 'cors',
+            # 'sec-fetch-site': 'same-origin',
+            # 'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
         
@@ -108,7 +94,8 @@ class Grok:
             
         else:
             self.session.headers.update({
-                'content-type': 'text/plain;charset=UTF-8'
+                'content-type': 'text/plain;charset=UTF-8',              
+                'accept-encoding': 'identity',
             })
             
             match self.c_run:
@@ -159,23 +146,24 @@ class Grok:
         self.session.headers = {
             'accept': '*/*',
             'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-            'baggage': self.baggage,
-            'cache-control': 'no-cache',
-            'content-type': 'application/json',
-            'origin': 'https://grok.com',
-            'pragma': 'no-cache',
-            'priority': 'u=1, i',
-            'referer': 'https://grok.com/c',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+            # 'baggage': self.baggage,
+            # 'cache-control': 'no-cache',
+            # 'content-type': 'application/json',
+            # 'origin': 'https://grok.com',
+            # 'pragma': 'no-cache',
+            # 'priority': 'u=1, i',
+            # 'referer': 'https://grok.com/c',
+            # 'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+            # 'sec-ch-ua-mobile': '?0',
+            # 'sec-ch-ua-platform': '"Windows"',
+            # 'sec-fetch-dest': 'empty',
+            # 'sec-fetch-mode': 'cors',
+            # 'sec-fetch-site': 'same-origin',
+            # 'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+            'accept-encoding': 'identity',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
             'x-statsig-id': xsid,
-            'x-xai-request-id': str(uuid4()),
+            # 'x-xai-request-id': str(uuid4()),
         }
         
         if not extra_data:
@@ -244,8 +232,8 @@ class Grok:
                         "cookies": self.session.cookies.get_dict(),
                         "actions": self.actions,
                         "xsid_script": self.xsid_script,
-                        "baggage": self.baggage,
-                        "sentry_trace": self.sentry_trace,
+                        # "baggage": self.baggage,
+                        # "sentry_trace": self.sentry_trace,
                         "conversationId": conversation_id,
                         "parentResponseId": parent_response,
                         "privateKey": self.keys["privateKey"]
@@ -328,8 +316,8 @@ class Grok:
                         "cookies": self.session.cookies.get_dict(),
                         "actions": self.actions,
                         "xsid_script": self.xsid_script,
-                        "baggage": self.baggage,
-                        "sentry_trace": self.sentry_trace,
+                        # "baggage": self.baggage,
+                        # "sentry_trace": self.sentry_trace,
                         "conversationId": extra_data["conversationId"],
                         "parentResponseId": parent_response,
                         "privateKey": self.keys["privateKey"]
