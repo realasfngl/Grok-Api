@@ -1,10 +1,10 @@
-from core        import Log, Run, Utils, Parser, Signature, Anon
+from core        import Log, Run, Utils, Parser, Signature, Anon, Headers
 from curl_cffi   import requests, CurlMime
 from dataclasses import dataclass, field
 from bs4         import BeautifulSoup
 from json        import dumps, loads
+from secrets     import token_hex
 from uuid        import uuid4
-
 
 @dataclass
 class Models:
@@ -24,23 +24,9 @@ class Grok:
     
     
     def __init__(self, model: str = "grok-3-auto", proxy: str = None) -> None:
-        self.session: requests.session.Session = requests.Session(impersonate="chrome136")
-        self.session.headers = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
-            'cache-control': 'no-cache',
-            'pragma': 'no-cache',
-            'priority': 'u=0, i',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'document',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'same-origin',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-        }
+        self.session: requests.session.Session = requests.Session(impersonate="chrome136", default_headers=False)
+        self.headers: Headers = Headers()
+        
         self.model_mode: str = _Models.get_model_mode(model, 0)
         self.model: str = model
         self.mode: str = _Models.get_model_mode(model, 1)
@@ -54,6 +40,7 @@ class Grok:
     def _load(self, extra_data: dict = None) -> None:
         
         if not extra_data:
+            self.session.headers = self.headers.LOAD
             load_site: requests.models.Response = self.session.get('https://grok.com/c')
             self.session.cookies.update(load_site.cookies)
             
@@ -73,29 +60,18 @@ class Grok:
             
     
     def c_request(self, next_action: str) -> None:
-
-        self.session.headers = {
-            'accept': 'text/x-component',
-            'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+        
+        self.session.headers = self.headers.C_REQUEST
+        self.session.headers.update({
             'baggage': self.baggage,
-            'cache-control': 'no-cache',
             'next-action': next_action,
-            'next-router-state-tree': '%5B%22%22%2C%7B%22children%22%3A%5B%22c%22%2C%7B%22children%22%3A%5B%5B%22slug%22%2C%22%22%2C%22oc%22%5D%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%2Ctrue%5D',
-            'origin': 'https://grok.com',
-            'pragma': 'no-cache',
-            'priority': 'u=1, i',
-            'referer': 'https://grok.com/c',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
             'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-        }
+        })
+        self.session.headers = Headers.fix_order(self.session.headers, self.headers.C_REQUEST)
         
         if self.c_run == 0:
+            self.session.headers.pop("content-type")
+            
             mime = CurlMime()
             mime.addpart(name="1", data=bytes(self.keys["userPublicKey"]), filename="blob", content_type="application/octet-stream")
             mime.addpart(name="0", filename=None, data='[{"userPublicKey":"$o1"}]')
@@ -107,9 +83,6 @@ class Grok:
             self.c_run += 1
             
         else:
-            self.session.headers.update({
-                'content-type': 'text/plain;charset=UTF-8'
-            })
             
             match self.c_run:
                 case 1:
@@ -156,27 +129,15 @@ class Grok:
             self.c_request(self.actions[2])
             xsid: str = Signature.generate_sign(f'/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', 'POST', self.verification_token, self.svg_data, self.numbers)
 
-        self.session.headers = {
-            'accept': '*/*',
-            'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+        self.session.headers = self.headers.CONVERSATION
+        self.session.headers.update({
             'baggage': self.baggage,
-            'cache-control': 'no-cache',
-            'content-type': 'application/json',
-            'origin': 'https://grok.com',
-            'pragma': 'no-cache',
-            'priority': 'u=1, i',
-            'referer': 'https://grok.com/c',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
             'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
             'x-statsig-id': xsid,
             'x-xai-request-id': str(uuid4()),
-        }
+            'traceparent': f"00-{token_hex(16)}-{token_hex(8)}-00"
+        })
+        self.session.headers = Headers.fix_order(self.session.headers, self.headers.CONVERSATION)
         
         if not extra_data:
             conversation_data: dict = {
@@ -300,7 +261,7 @@ class Grok:
             convo_request: requests.models.Response = self.session.post(f'https://grok.com/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', json=conversation_data, timeout=9999)
 
             if "modelResponse" in convo_request.text:
-                response = conversation_id = parent_response = None
+                response = conversation_id = parent_response = image_urls = None
                 stream_response: list = []
                 
                 for response_dict in convo_request.text.strip().split('\n'):

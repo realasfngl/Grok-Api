@@ -1,7 +1,7 @@
 from core import Log, Grok
 from json import dumps
 
-proxy = ""
+proxy = "http://user:pass@ip:port"
 
 message1: str = "Hey how are you??"
 Log.Info("USER: " + message1)
