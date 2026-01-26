@@ -5,3 +5,4 @@ coincurve
 beautifulsoup4
 pydantic
 colorama
+openai

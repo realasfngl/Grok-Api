@@ -6,6 +6,43 @@ from json        import dumps, loads
 from secrets     import token_hex
 from uuid        import uuid4
 
+class GrokAPIError(Exception):
+    """Custom exception for Grok API errors with detailed error information"""
+
+    def __init__(self, error_response: str):
+        self.raw_response = error_response
+        self.error_data = {}
+
+        # Try to parse the error as JSON
+        try:
+            parsed_error = loads(error_response)
+            if isinstance(parsed_error, dict) and "error" in parsed_error:
+                self.error_data = parsed_error["error"]
+            else:
+                # If it's not the expected format, store as-is
+                self.error_data = {"message": error_response}
+        except (ValueError, TypeError):
+            # If we can't parse as JSON, treat as raw error text
+            self.error_data = {"message": error_response}
+
+        super().__init__(self.error_data.get("message", "Unknown Grok API error"))
+
+    def get_code(self) -> int:
+        """Get the error code if available"""
+        return self.error_data.get("code")
+
+    def get_message(self) -> str:
+        """Get the error message"""
+        return self.error_data.get("message", str(self))
+
+    def get_details(self) -> list:
+        """Get error details if available"""
+        return self.error_data.get("details", [])
+
+    def to_dict(self) -> dict:
+        """Return the full error data as dictionary"""
+        return self.error_data
+
 @dataclass
 class Models:
     models: dict[str, list[str]] = field(default_factory=lambda: {
@@ -217,7 +254,7 @@ class Grok:
                     return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
                 Log.Error("Something went wrong")
                 Log.Error(convo_request.text)
-                return {"error": convo_request.text}
+                raise GrokAPIError(convo_request.text)
         else:
             conversation_data: dict = {
                 'message': message,
@@ -301,6 +338,6 @@ class Grok:
                     return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
                 Log.Error("Something went wrong")
                 Log.Error(convo_request.text)
-                return {"error": convo_request.text}
+                raise GrokAPIError(convo_request.text)
             
 
