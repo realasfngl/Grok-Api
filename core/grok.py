@@ -9,21 +9,24 @@ from uuid        import uuid4
 @dataclass
 class Models:
     models: dict[str, list[str]] = field(default_factory=lambda: {
-        "grok-3-auto": ["MODEL_MODE_AUTO", "auto"],
-        "grok-3-fast": ["MODEL_MODE_FAST", "fast"],
-        "grok-4": ["MODEL_MODE_EXPERT", "expert"],
-        "grok-4-mini-thinking-tahoe": ["MODEL_MODE_GROK_4_MINI_THINKING", "grok-4-mini-thinking"]
+        "grok-3":               ["auto",                 "auto"],
+        "grok-4":               ["expert",               "expert"],
+        "grok-4-1":             ["grok-4-1",             "grok-4-1"],
+        "grok-4-1-nightly":     ["grok-4-1-nightly",     "grok-4-1-nightly"],
+        "grok-4-1-thinking":    ["grok-4-1-thinking",    "grok-4-1-thinking"],
+        "grok-4-mini-thinking": ["grok-4-mini-thinking", "grok-4-mini-thinking"],
+        "grok-420":             ["grok-420",             "grok-420"],
+        "grok-4-heavy":         ["heavy",                "heavy"],
     })
 
     def get_model_mode(self, model: str, index: int) -> str:
-        return self.models.get(model, ["MODEL_MODE_AUTO", "auto"])[index]
+        return self.models.get(model, ["auto", "auto"])[index]
 
 _Models = Models()
 
 class Grok:
     
-    
-    def __init__(self, model: str = "grok-3-auto", proxy: str = None) -> None:
+    def __init__(self, model: str = "grok-3", proxy: str = None) -> None:
         self.session: requests.session.Session = requests.Session(impersonate="chrome136", default_headers=False)
         self.headers: Headers = Headers()
         
