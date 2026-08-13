@@ -1,310 +1,251 @@
-from core        import Log, Run, Utils, Parser, Signature, Anon, Headers
-from curl_cffi   import requests, CurlMime
+from core import Log, Signature, Anon, Headers
+from curl_cffi import requests, CurlMime
 from dataclasses import dataclass, field
-from bs4         import BeautifulSoup
-from json        import dumps, loads
-from secrets     import token_hex
-from uuid        import uuid4
+from bs4 import BeautifulSoup
+from json import dumps, loads
+from secrets import token_hex
+from uuid import uuid4
+from base64 import b64decode
+from typing import Optional, Dict, Any, Union
+import re
 
 @dataclass
 class Models:
-    models: dict[str, list[str]] = field(default_factory=lambda: {
-        "grok-3-auto": ["MODEL_MODE_AUTO", "auto"],
-        "grok-3-fast": ["MODEL_MODE_FAST", "fast"],
-        "grok-4": ["MODEL_MODE_EXPERT", "expert"],
-        "grok-4-mini-thinking-tahoe": ["MODEL_MODE_GROK_4_MINI_THINKING", "grok-4-mini-thinking"]
+    models: dict[str, str] = field(default_factory=lambda: {
+        "grok-3-fast": "fast",
+        "grok-3-auto": "auto",
+        "grok-3": "fast",
+        "grok-4": "expert",
+        "grok-4-mini-thinking-tahoe": "grok-4-mini-thinking"
     })
 
-    def get_model_mode(self, model: str, index: int) -> str:
-        return self.models.get(model, ["MODEL_MODE_AUTO", "auto"])[index]
+    def get_mode(self, model: str) -> str:
+        return self.models.get(model, "fast")
 
 _Models = Models()
 
 class Grok:
-    
-    
-    def __init__(self, model: str = "grok-3-auto", proxy: str = None) -> None:
-        self.session: requests.session.Session = requests.Session(impersonate="chrome136", default_headers=False)
-        self.headers: Headers = Headers()
+    def __init__(self, model: str = "grok-3-fast", proxy: Optional[str] = None, cookie: Optional[Union[str, dict]] = None) -> None:
+        self.session = requests.Session(impersonate="chrome136", default_headers=False)
+        self.headers = Headers()
+        self.model = model
+        self.mode_id = _Models.get_mode(model)
+        self.numbers = [22, 15, 3, 43]
+        self.cookie = cookie
         
-        self.model_mode: str = _Models.get_model_mode(model, 0)
-        self.model: str = model
-        self.mode: str = _Models.get_model_mode(model, 1)
-        self.c_run: int = 0
-        self.keys: dict = Anon.generate_keys()
         if proxy:
-            self.session.proxies = {
-                "all": proxy
-            }
-    
-    def _load(self, extra_data: dict = None) -> None:
+            self.session.proxies = {"all": proxy}
+            
+        if cookie:
+            if isinstance(cookie, str):
+                for item in cookie.split(';'):
+                    if '=' in item:
+                        k, v = item.strip().split('=', 1)
+                        self.session.cookies.set(k.strip(), v.strip())
+            elif isinstance(cookie, dict):
+                for k, v in cookie.items():
+                    self.session.cookies.set(k.strip(), str(v).strip())
+
+    def _get_page_verification(self) -> tuple[str, str]:
+        headers = {
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+        }
+        res = self.session.get('https://grok.com/c', headers=headers)
+        self.session.cookies.update(res.cookies)
+        
+        m_ver = re.search(r'grok-site[^\"]*verification["\s]+content="([^"]+)"', res.text)
+        if not m_ver:
+            m_ver = re.search(r'content="([^"]+)"[^>]*name="grok-site[^\"]*verification"', res.text)
+        if not m_ver:
+            m_ver = re.search(r'"name":"grok-site[^\"]*verification","content":"([^"]+)"', res.text)
+        if not m_ver:
+            m_ver = re.search(r'verification\\\\?",\\\\?"content\\\\?":\\\\?"([^"]+)\\\\?"', res.text)
+            
+        m_curves = re.search(r'curves\\?":(\[\[.*?\]\])', res.text)
+        if not m_curves:
+            m_curves = re.search(r'curves\\\\?":(\[\[.*?\]\])', res.text)
+            
+        if not m_ver or not m_curves:
+            raise ValueError(f"Could not parse verification token or curves from Grok page (status {res.status_code})")
+            
+        verification_token = m_ver.group(1).replace('\\\\', '')
+        curves_raw = m_curves.group(1).replace('\\"', '"').replace('\\\\"', '"')
+        curves_data = loads(curves_raw)
+        anim = int(list(b64decode(verification_token))[5] % 4)
+        d_values = curves_data[anim]
+        
+        svg_data = "M 10,30 C" + " C".join(
+            f" {item['color'][0]},{item['color'][1]} {item['color'][2]},{item['color'][3]} {item['color'][4]},{item['color'][5]}"
+            f" h {item['deg']}"
+            f" s {item['bezier'][0]},{item['bezier'][1]} {item['bezier'][2]},{item['bezier'][3]}"
+            for item in d_values
+        )
+        return verification_token, svg_data
+
+    def start_convo(self, message: str, extra_data: Optional[Dict[str, Any]] = None) -> dict:
+        verification_token, svg_data = self._get_page_verification()
+        
+        baggage = "sentry-environment=production,sentry-public_key=b3111d39fed54ab19985a10525251d82,sentry-trace_id=" + str(uuid4()).replace("-", "")
+        sentry_trace = str(uuid4()).replace("-", "")
         
         if not extra_data:
-            self.session.headers = self.headers.LOAD
-            load_site: requests.models.Response = self.session.get('https://grok.com/c')
-            self.session.cookies.update(load_site.cookies)
+            path = '/rest/app-chat/conversations/new'
+            xsid = Signature.generate_sign(path, 'POST', verification_token, svg_data, self.numbers)
             
-            scripts: list = [s['src'] for s in BeautifulSoup(load_site.text, 'html.parser').find_all('script', src=True) if '/_next/static/chunks/' in s['src']]
-
-            self.actions, self.xsid_script = Parser.parse_grok(scripts)
-            
-            self.baggage: str = Utils.between(load_site.text, '<meta name="baggage" content="', '"')
-            self.sentry_trace: str = Utils.between(load_site.text, '<meta name="sentry-trace" content="', '-')
-        else:
-            self.session.cookies.update(extra_data["cookies"])
-
-            self.actions: list = extra_data["actions"]
-            self.xsid_script: list =  extra_data["xsid_script"]
-            self.baggage: str = extra_data["baggage"]
-            self.sentry_trace: str = extra_data["sentry_trace"]
-            
-    
-    def c_request(self, next_action: str) -> None:
-        
-        self.session.headers = self.headers.C_REQUEST
-        self.session.headers.update({
-            'baggage': self.baggage,
-            'next-action': next_action,
-            'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
-        })
-        self.session.headers = Headers.fix_order(self.session.headers, self.headers.C_REQUEST)
-        
-        if self.c_run == 0:
-            self.session.headers.pop("content-type")
-            
-            mime = CurlMime()
-            mime.addpart(name="1", data=bytes(self.keys["userPublicKey"]), filename="blob", content_type="application/octet-stream")
-            mime.addpart(name="0", filename=None, data='[{"userPublicKey":"$o1"}]')
-            
-            c_request: requests.models.Response = self.session.post("https://grok.com/c", multipart=mime)
-            self.session.cookies.update(c_request.cookies)
-            
-            self.anon_user: str = Utils.between(c_request.text, '{"anonUserId":"', '"')
-            self.c_run += 1
-            
-        else:
-            
-            match self.c_run:
-                case 1:
-                    data: str = dumps([{"anonUserId":self.anon_user}])
-                case 2:
-                    data: str = dumps([{"anonUserId":self.anon_user,**self.challenge_dict}])
-            
-            c_request: requests.models.Response = self.session.post('https://grok.com/c', data=data)
-            self.session.cookies.update(c_request.cookies)
-
-            match self.c_run:
-                case 1:
-                    start_idx = c_request.content.hex().find("3a6f38362c")
-                    if start_idx != -1:
-                        start_idx += len("3a6f38362c")
-                        end_idx = c_request.content.hex().find("313a", start_idx)
-                        if end_idx != -1:
-                            challenge_hex = c_request.content.hex()[start_idx:end_idx]
-                            challenge_bytes = bytes.fromhex(challenge_hex)
-
-                    self.challenge_dict: dict = Anon.sign_challenge(challenge_bytes, self.keys["privateKey"])
-                    Log.Success(f"Solved Challenge: {self.challenge_dict}")
-                case 2:
-                    self.verification_token, self.anim = Parser.get_anim(c_request.text, "grok-site-verification")
-                    self.svg_data, self.numbers = Parser.parse_values(c_request.text, self.anim, self.xsid_script)
-                    
-            self.c_run += 1
-        
-    
-    def start_convo(self, message: str, extra_data: dict = None) -> dict:
-        
-        if not extra_data:
-            self._load()
-            self.c_request(self.actions[0])
-            self.c_request(self.actions[1])
-            self.c_request(self.actions[2])
-            xsid: str = Signature.generate_sign('/rest/app-chat/conversations/new', 'POST', self.verification_token, self.svg_data, self.numbers)
-        else:
-            self._load(extra_data)
-            self.c_run: int = 1
-            self.anon_user: str = extra_data["anon_user"]
-            self.keys["privateKey"] = extra_data["privateKey"]
-            self.c_request(self.actions[1])
-            self.c_request(self.actions[2])
-            xsid: str = Signature.generate_sign(f'/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', 'POST', self.verification_token, self.svg_data, self.numbers)
-
-        self.session.headers = self.headers.CONVERSATION
-        self.session.headers.update({
-            'baggage': self.baggage,
-            'sentry-trace': f'{self.sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
-            'x-statsig-id': xsid,
-            'x-xai-request-id': str(uuid4()),
-            'traceparent': f"00-{token_hex(16)}-{token_hex(8)}-00"
-        })
-        self.session.headers = Headers.fix_order(self.session.headers, self.headers.CONVERSATION)
-        
-        if not extra_data:
-            conversation_data: dict = {
-                'temporary': False,
-                'modelName': self.model,
-                'message': message,
-                'fileAttachments': [],
-                'imageAttachments': [],
-                'disableSearch': False,
-                'enableImageGeneration': True,
-                'returnImageBytes': False,
-                'returnRawGrokInXaiRequest': False,
-                'enableImageStreaming': True,
-                'imageGenerationCount': 2,
-                'forceConcise': False,
-                'toolOverrides': {},
-                'enableSideBySide': True,
-                'sendFinalMetadata': True,
-                'isReasoning': False,
-                'webpageUrls': [],
-                'disableTextFollowUps': False,
-                'responseMetadata': {
-                    'requestModelDetails': {
-                        'modelId': self.model,
-                    },
-                },
-                'disableMemory': False,
-                'forceSideBySide': False,
-                'modelMode': self.model_mode,
-                'isAsyncChat': False,
+            chat_headers = {
+                'accept': '*/*',
+                'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                'baggage': baggage,
+                'content-type': 'application/json',
+                'origin': 'https://grok.com',
+                'referer': 'https://grok.com/c',
+                'sentry-trace': f'{sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+                'traceparent': f"00-{token_hex(16)}-{token_hex(8)}-00",
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                'x-statsig-id': xsid,
+                'x-xai-request-id': str(uuid4())
             }
             
-            convo_request: requests.models.Response = self.session.post('https://grok.com/rest/app-chat/conversations/new', json=conversation_data, timeout=9999)
+            payload = {
+                "temporary": False,
+                "modeId": self.mode_id,
+                "message": message,
+                "fileAttachments": [],
+                "imageAttachments": [],
+                "disableSearch": False,
+                "enableImageGeneration": True,
+                "returnImageBytes": False,
+                "returnRawGrokInXaiRequest": False,
+                "enableImageStreaming": True,
+                "imageGenerationCount": 2,
+                "forceConcise": False,
+                "toolOverrides": {},
+                "enableSideBySide": True,
+                "sendFinalMetadata": True,
+                "isReasoning": False,
+                "webpageUrls": [],
+                "disableTextFollowUps": False,
+                "disableMemory": False,
+                "isAsyncChat": False,
+            }
             
-            if "modelResponse" in convo_request.text:
-                response = conversation_id = parent_response = image_urls = None
-                stream_response: list = []
+            resp = self.session.post('https://grok.com/rest/app-chat/conversations/new', json=payload, headers=chat_headers)
+            
+            if resp.status_code == 200:
+                conversation_id = None
+                parent_model_resp_id = None
+                stream_tokens = []
+                full_message = ""
                 
-                for response_dict in convo_request.text.strip().split('\n'):  
-                    data: dict = loads(response_dict)
-
-                    token: str = data.get('result', {}).get('response', {}).get('token')
-                    if token:
-                        stream_response.append(token)
-                        
-                    if not response and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message'):
-                        response: str = data['result']['response']['modelResponse']['message']
-
-                    if not conversation_id and data.get('result', {}).get('conversation', {}).get('conversationId'):
-                        conversation_id: str = data['result']['conversation']['conversationId']
-
-                    if not parent_response and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId'):
-                        parent_response: str = data['result']['response']['modelResponse']['responseId']
-                    
-                    if not image_urls and data.get('result', {}).get('response', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
-                        image_urls: str = data['result']['response']['modelResponse']['generatedImageUrls']
-                    
+                for line in resp.text.strip().split('\n'):
+                    try:
+                        data = loads(line)
+                        if not conversation_id and data.get('result', {}).get('conversation', {}).get('conversationId'):
+                            conversation_id = data['result']['conversation']['conversationId']
+                        mr_id = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId')
+                        if mr_id:
+                            parent_model_resp_id = mr_id
+                        t = data.get('result', {}).get('response', {}).get('token')
+                        if t:
+                            stream_tokens.append(t)
+                            full_message += t
+                        msg = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message')
+                        if msg:
+                            full_message = msg
+                    except Exception:
+                        pass
                 
                 return {
-                    "response": response,
-                    "stream_response": stream_response,
-                    "images": image_urls,
+                    "response": full_message,
+                    "stream_response": stream_tokens,
+                    "images": None,
                     "extra_data": {
-                        "anon_user": self.anon_user,
-                        "cookies": self.session.cookies.get_dict(),
-                        "actions": self.actions,
-                        "xsid_script": self.xsid_script,
-                        "baggage": self.baggage,
-                        "sentry_trace": self.sentry_trace,
                         "conversationId": conversation_id,
-                        "parentResponseId": parent_response,
-                        "privateKey": self.keys["privateKey"]
+                        "parentResponseId": parent_model_resp_id,
+                        "cookies": self.session.cookies.get_dict(),
                     }
                 }
             else:
-                if 'rejected by anti-bot rules' in convo_request.text:
-                    return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
-                elif "Grok is under heavy usage right now" in convo_request.text:
-                    Log.Error("Grok is under heavy usage right now, try again later.")
-                    return convo_request.json()
-                    
-                Log.Error("Something went wrong")
-                Log.Error(convo_request.text)
-                return {"error": convo_request.text}
+                return resp.json() if resp.text.startswith('{') else {"error": resp.text}
         else:
-            conversation_data: dict = {
-                'message': message,
-                'modelName': self.model,
-                'parentResponseId': extra_data["parentResponseId"],
-                'disableSearch': False,
-                'enableImageGeneration': True,
-                'imageAttachments': [],
-                'returnImageBytes': False,
-                'returnRawGrokInXaiRequest': False,
-                'fileAttachments': [],
-                'enableImageStreaming': True,
-                'imageGenerationCount': 2,
-                'forceConcise': False,
-                'toolOverrides': {},
-                'enableSideBySide': True,
-                'sendFinalMetadata': True,
-                'customPersonality': '',
-                'isReasoning': False,
-                'webpageUrls': [],
-                'metadata': {
-                    'requestModelDetails': {
-                        'modelId': self.model,
-                    },
-                    'request_metadata': {
-                        'model': self.model,
-                        'mode': self.mode,
-                    },
-                },
-                'disableTextFollowUps': False,
-                'disableArtifact': False,
-                'isFromGrokFiles': False,
-                'disableMemory': False,
-                'forceSideBySide': False,
-                'modelMode': self.model_mode,
-                'isAsyncChat': False,
-                'skipCancelCurrentInflightRequests': False,
-                'isRegenRequest': False,
+            conv_id = extra_data["conversationId"]
+            parent_id = extra_data["parentResponseId"]
+            path = f'/rest/app-chat/conversations/{conv_id}/responses'
+            xsid = Signature.generate_sign(path, 'POST', verification_token, svg_data, self.numbers)
+            
+            chat_headers = {
+                'accept': '*/*',
+                'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                'baggage': baggage,
+                'content-type': 'application/json',
+                'origin': 'https://grok.com',
+                'referer': f'https://grok.com/c/{conv_id}',
+                'sentry-trace': f'{sentry_trace}-{str(uuid4()).replace("-", "")[:16]}-0',
+                'traceparent': f"00-{token_hex(16)}-{token_hex(8)}-00",
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                'x-statsig-id': xsid,
+                'x-xai-request-id': str(uuid4())
             }
-
-            convo_request: requests.models.Response = self.session.post(f'https://grok.com/rest/app-chat/conversations/{extra_data["conversationId"]}/responses', json=conversation_data, timeout=9999)
-
-            if "modelResponse" in convo_request.text:
-                response = conversation_id = parent_response = image_urls = None
-                stream_response: list = []
+            
+            payload = {
+                "message": message,
+                "modeId": self.mode_id,
+                "parentResponseId": parent_id,
+                "disableSearch": False,
+                "enableImageGeneration": True,
+                "imageAttachments": [],
+                "returnImageBytes": False,
+                "returnRawGrokInXaiRequest": False,
+                "fileAttachments": [],
+                "enableImageStreaming": True,
+                "imageGenerationCount": 2,
+                "forceConcise": False,
+                "toolOverrides": {},
+                "enableSideBySide": True,
+                "sendFinalMetadata": True,
+                "isReasoning": False,
+                "webpageUrls": [],
+                "disableTextFollowUps": False,
+                "disableArtifact": False,
+                "isFromGrokFiles": False,
+                "disableMemory": False,
+                "isAsyncChat": False,
+            }
+            
+            resp = self.session.post(f'https://grok.com{path}', json=payload, headers=chat_headers)
+            
+            if resp.status_code == 200:
+                parent_model_resp_id = None
+                stream_tokens = []
+                full_message = ""
                 
-                for response_dict in convo_request.text.strip().split('\n'):
-                    data: dict = loads(response_dict)
-
-                    token: str = data.get('result', {}).get('token')
-                    if token:
-                        stream_response.append(token)
-                        
-                    if not response and data.get('result', {}).get('modelResponse', {}).get('message'):
-                        response: str = data['result']['modelResponse']['message']
-
-                    if not parent_response and data.get('result', {}).get('modelResponse', {}).get('responseId'):
-                        parent_response: str = data['result']['modelResponse']['responseId']
-                        
-                    if not image_urls and data.get('result', {}).get('modelResponse', {}).get('generatedImageUrls', {}):
-                        image_urls: str = data['result']['modelResponse']['generatedImageUrls']
+                for line in resp.text.strip().split('\n'):
+                    try:
+                        data = loads(line)
+                        mr_id = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId')
+                        if mr_id:
+                            parent_model_resp_id = mr_id
+                        t = data.get('result', {}).get('response', {}).get('token')
+                        if t:
+                            stream_tokens.append(t)
+                            full_message += t
+                        msg = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message')
+                        if msg:
+                            full_message = msg
+                    except Exception:
+                        pass
                 
                 return {
-                    "response": response,
-                    "stream_response": stream_response,
-                    "images": image_urls,
+                    "response": full_message,
+                    "stream_response": stream_tokens,
+                    "images": None,
                     "extra_data": {
-                        "anon_user": self.anon_user,
+                        "conversationId": conv_id,
+                        "parentResponseId": parent_model_resp_id,
                         "cookies": self.session.cookies.get_dict(),
-                        "actions": self.actions,
-                        "xsid_script": self.xsid_script,
-                        "baggage": self.baggage,
-                        "sentry_trace": self.sentry_trace,
-                        "conversationId": extra_data["conversationId"],
-                        "parentResponseId": parent_response,
-                        "privateKey": self.keys["privateKey"]
                     }
                 }
             else:
-                if 'rejected by anti-bot rules' in convo_request.text:
-                    return Grok(self.session.proxies.get("all")).start_convo(message=message, extra_data=extra_data)
-                Log.Error("Something went wrong")
-                Log.Error(convo_request.text)
-                return {"error": convo_request.text}
-            
-
+                return resp.json() if resp.text.startswith('{') else {"error": resp.text}
