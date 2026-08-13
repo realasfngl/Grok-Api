@@ -30,7 +30,7 @@ class Grok:
         self.headers = Headers()
         self.model = model
         self.mode_id = _Models.get_mode(model)
-        self.numbers = [22, 29, 34, 4]
+        self.numbers: Optional[list[int]] = None
         self.cookie = cookie
         
         if proxy:

@@ -13,46 +13,44 @@ class Parser:
     def get_signature_numbers(cls, session: requests.Session, html: str, refresh: bool = False) -> List[int]:
         if cls._cached_numbers and not refresh:
             return cls._cached_numbers
-        try:
-            soup = BeautifulSoup(html, "html.parser")
-            scripts = [s["src"] for s in soup.find_all("script", src=True) if s.get("src")]
-            
-            module_id = None
-            all_chunks = {}
-            
-            for sc in scripts:
-                url = sc if sc.startswith("http") else f"https://grok.com{sc}"
-                try:
-                    txt = session.get(url).text
-                    if "x-statsig-id" in txt and not module_id:
-                        m_mod = search(r"await\s+\w+\.A\((\d+)\)", txt)
-                        if m_mod:
-                            module_id = m_mod.group(1)
-                    
-                    for m in finditer(r"(\d+),s=>\{s\.v\(t=>Promise\.all\(\[\"static/chunks/([a-zA-Z0-9_\-]+)\.js\"\]", txt):
-                        all_chunks[m.group(1)] = m.group(2)
-                except Exception:
-                    continue
-                    
-            chunk_name = all_chunks.get(module_id)
-            if chunk_name:
-                sig_url = f"https://cdn.grok.com/_next/static/chunks/{chunk_name}.js"
-                sig_txt = session.get(sig_url).text
+        
+        soup = BeautifulSoup(html, "html.parser")
+        scripts = [s["src"] for s in soup.find_all("script", src=True) if s.get("src")]
+        
+        module_id = None
+        all_chunks = {}
+        
+        for sc in scripts:
+            url = sc if sc.startswith("http") else f"https://grok.com{sc}"
+            try:
+                txt = session.get(url).text
+                if "x-statsig-id" in txt and not module_id:
+                    m_mod = search(r"await\s+\w+\.A\((\d+)\)", txt)
+                    if m_mod:
+                        module_id = m_mod.group(1)
                 
-                m_nums = findall(r"W\[(\d+)\],\s*16", sig_txt)
-                if len(m_nums) >= 4:
-                    cls._cached_numbers = [int(x) for x in m_nums[:4]]
-                    return cls._cached_numbers
-                    
-                m_all = findall(r"W\[(\d+)\]", sig_txt)
-                sig_indices = [int(x) for x in m_all if int(x) not in range(7)]
-                if len(sig_indices) >= 3:
-                    cls._cached_numbers = [sig_indices[0], sig_indices[1], sig_indices[2], 4]
-                    return cls._cached_numbers
-        except Exception:
-            pass
-        cls._cached_numbers = [22, 29, 34, 4]
-        return cls._cached_numbers
+                for m in finditer(r"(\d+),s=>\{s\.v\(t=>Promise\.all\(\[\"static/chunks/([a-zA-Z0-9_\-]+)\.js\"\]", txt):
+                    all_chunks[m.group(1)] = m.group(2)
+            except Exception:
+                continue
+                
+        chunk_name = all_chunks.get(module_id)
+        if chunk_name:
+            sig_url = f"https://cdn.grok.com/_next/static/chunks/{chunk_name}.js"
+            sig_txt = session.get(sig_url).text
+            
+            m_nums = findall(r"W\[(\d+)\],\s*16", sig_txt)
+            if len(m_nums) >= 4:
+                cls._cached_numbers = [int(x) for x in m_nums[:4]]
+                return cls._cached_numbers
+                
+            m_all = findall(r"W\[(\d+)\]", sig_txt)
+            sig_indices = [int(x) for x in m_all if int(x) not in range(7)]
+            if len(sig_indices) >= 3:
+                cls._cached_numbers = [sig_indices[0], sig_indices[1], sig_indices[2], 4]
+                return cls._cached_numbers
+                
+        raise ValueError("Could not dynamically parse signature numbers from Grok scripts")
 
     @staticmethod
     def parse_values_from_rsc(rsc_text: str, anim: int = 0) -> str:
@@ -105,5 +103,4 @@ class Parser:
                     actions = [m0.group(1), m1.group(1), m2.group(1)]
                     break
         
-        numbers = [22, 29, 34, 4]
-        return actions, numbers
+        return actions
