@@ -1,4 +1,4 @@
-from core import Log, Signature, Anon, Headers
+from core import Log, Signature, Anon, Headers, Parser
 from curl_cffi import requests, CurlMime
 from dataclasses import dataclass, field
 from bs4 import BeautifulSoup
@@ -30,7 +30,7 @@ class Grok:
         self.headers = Headers()
         self.model = model
         self.mode_id = _Models.get_mode(model)
-        self.numbers = [22, 15, 3, 43]
+        self.numbers = [22, 29, 34, 4]
         self.cookie = cookie
         
         if proxy:
@@ -46,7 +46,7 @@ class Grok:
                 for k, v in cookie.items():
                     self.session.cookies.set(k.strip(), str(v).strip())
 
-    def _get_page_verification(self) -> tuple[str, str]:
+    def _get_page_verification(self, refresh_numbers: bool = False) -> tuple[str, str]:
         headers = {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -82,15 +82,20 @@ class Grok:
             f" s {item['bezier'][0]},{item['bezier'][1]} {item['bezier'][2]},{item['bezier'][3]}"
             for item in d_values
         )
+
+        self.numbers = Parser.get_signature_numbers(self.session, res.text, refresh=refresh_numbers)
         return verification_token, svg_data
 
-    def start_convo(self, message: str, extra_data: Optional[Dict[str, Any]] = None) -> dict:
+    def start_convo(self, message: str, extra_data: Optional[Dict[str, Any]] = None, _retry: bool = True) -> dict:
+        if extra_data and isinstance(extra_data, dict) and "cookies" in extra_data:
+            self.session.cookies.update(extra_data["cookies"])
+
         verification_token, svg_data = self._get_page_verification()
         
         baggage = "sentry-environment=production,sentry-public_key=b3111d39fed54ab19985a10525251d82,sentry-trace_id=" + str(uuid4()).replace("-", "")
         sentry_trace = str(uuid4()).replace("-", "")
         
-        if not extra_data:
+        if not extra_data or "conversationId" not in extra_data:
             path = '/rest/app-chat/conversations/new'
             xsid = Signature.generate_sign(path, 'POST', verification_token, svg_data, self.numbers)
             
@@ -142,16 +147,24 @@ class Grok:
                 for line in resp.text.strip().split('\n'):
                     try:
                         data = loads(line)
-                        if not conversation_id and data.get('result', {}).get('conversation', {}).get('conversationId'):
-                            conversation_id = data['result']['conversation']['conversationId']
-                        mr_id = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId')
+                        res_obj = data.get('result', {})
+                        if not res_obj:
+                            continue
+                        
+                        if not conversation_id and res_obj.get('conversation', {}).get('conversationId'):
+                            conversation_id = res_obj['conversation']['conversationId']
+                            
+                        resp_item = res_obj.get('response', res_obj)
+                        mr_id = resp_item.get('modelResponse', {}).get('responseId') or res_obj.get('responseId')
                         if mr_id:
                             parent_model_resp_id = mr_id
-                        t = data.get('result', {}).get('response', {}).get('token')
+                            
+                        t = resp_item.get('token')
                         if t:
                             stream_tokens.append(t)
                             full_message += t
-                        msg = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message')
+                            
+                        msg = resp_item.get('modelResponse', {}).get('message')
                         if msg:
                             full_message = msg
                     except Exception:
@@ -168,10 +181,14 @@ class Grok:
                     }
                 }
             else:
-                return resp.json() if resp.text.startswith('{') else {"error": resp.text}
+                res_json = resp.json() if resp.text.startswith('{') else {"error": resp.text}
+                if _retry and isinstance(res_json, dict) and res_json.get("error", {}).get("code") == 7:
+                    self._get_page_verification(refresh_numbers=True)
+                    return self.start_convo(message, extra_data=extra_data, _retry=False)
+                return res_json
         else:
             conv_id = extra_data["conversationId"]
-            parent_id = extra_data["parentResponseId"]
+            parent_id = extra_data.get("parentResponseId")
             path = f'/rest/app-chat/conversations/{conv_id}/responses'
             xsid = Signature.generate_sign(path, 'POST', verification_token, svg_data, self.numbers)
             
@@ -224,14 +241,21 @@ class Grok:
                 for line in resp.text.strip().split('\n'):
                     try:
                         data = loads(line)
-                        mr_id = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('responseId')
+                        res_obj = data.get('result', {})
+                        if not res_obj:
+                            continue
+                            
+                        resp_item = res_obj.get('response', res_obj)
+                        mr_id = resp_item.get('modelResponse', {}).get('responseId') or res_obj.get('responseId')
                         if mr_id:
                             parent_model_resp_id = mr_id
-                        t = data.get('result', {}).get('response', {}).get('token')
+                            
+                        t = resp_item.get('token')
                         if t:
                             stream_tokens.append(t)
                             full_message += t
-                        msg = data.get('result', {}).get('response', {}).get('modelResponse', {}).get('message')
+                            
+                        msg = resp_item.get('modelResponse', {}).get('message')
                         if msg:
                             full_message = msg
                     except Exception:
@@ -248,4 +272,8 @@ class Grok:
                     }
                 }
             else:
-                return resp.json() if resp.text.startswith('{') else {"error": resp.text}
+                res_json = resp.json() if resp.text.startswith('{') else {"error": resp.text}
+                if _retry and isinstance(res_json, dict) and res_json.get("error", {}).get("code") == 7:
+                    self._get_page_verification(refresh_numbers=True)
+                    return self.start_convo(message, extra_data=extra_data, _retry=False)
+                return res_json
