@@ -2,6 +2,8 @@
 
 A free Grok API wrapper that allows you to use Grok without API access or account authentication.
 
+# This project is outdated and discontinued as it is not possible to write with Grok without account anymore.
+
 ## Overview
 
 This project provides a Python-based API wrapper for Grok AI, enabling you to interact with Grok's conversational AI without requiring official API access or account credentials. It includes both a direct Python interface and a FastAPI server for easy integration into your applications.
