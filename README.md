@@ -42,10 +42,14 @@ pip install -r requirements.txt
 
 | Model | Mode | Description |
 |-------|------|-------------|
-| `grok-3-auto` | auto | Automatic mode |
-| `grok-3-fast` | fast | Fast processing mode |
+| `grok-3` | auto | Default model |
 | `grok-4` | expert | Expert mode |
-| `grok-4-mini-thinking-tahoe` | grok-4-mini-thinking | Mini thinking mode |
+| `grok-4-1` | grok-4-1 | Grok 4.1 |
+| `grok-4-1-nightly` | grok-4-1-nightly | Grok 4.1 Nightly |
+| `grok-4-1-thinking` | grok-4-1-thinking | Grok 4.1 Thinking |
+| `grok-4-mini-thinking` | grok-4-mini-thinking | Mini thinking mode |
+| `grok-420` | grok-420 | Grok 420 |
+| `grok-4-heavy` | heavy | Heavy mode |
 
 ### Manual Usage (Python)
 
@@ -53,11 +57,11 @@ pip install -r requirements.txt
 ```python
 from core import Grok
 
-response = Grok("grok-3-fast").start_convo("Hello, how are you today?")
+response = Grok("grok-3").start_convo("Hello, how are you today?")
 print(response)
 
 proxy = "http://username:password@ip:port"
-response = Grok("grok-3-fast", proxy).start_convo("Tell me a joke")
+response = Grok("grok-3", proxy).start_convo("Tell me a joke")
 print(response)
 ```
 
@@ -106,7 +110,7 @@ response = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Hello, Grok!",
-        "model": "grok-3-fast",
+        "model": "grok-3",
         "extra_data": None
     }
 )
@@ -122,7 +126,7 @@ response1 = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Hello!",
-        "model": "grok-3-fast",
+        "model": "grok-3",
         "extra_data": None
     }
 )
@@ -134,7 +138,7 @@ response2 = requests.post(
     json={
         "proxy": "http://user:pass@ip:port",
         "message": "Tell me more",
-        "model": "grok-3-fast",
+        "model": "grok-3",
         "extra_data": data1["extra_data"]
     }
 )
