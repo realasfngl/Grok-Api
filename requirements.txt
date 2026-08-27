@@ -1,7 +1,7 @@
-curl_cffi
-fastapi
-uvicorn
-coincurve
-beautifulsoup4
-pydantic
-colorama
+curl_cffi==0.16.2
+fastapi==0.141.1
+uvicorn==0.52.4
+coincurve==21.0.0
+beautifulsoup4==4.15.0
+colorama==0.4.6
+pydantic==2.13.4
